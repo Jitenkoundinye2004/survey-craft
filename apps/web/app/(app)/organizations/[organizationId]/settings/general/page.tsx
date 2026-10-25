@@ -3,7 +3,6 @@ import { AISettingsToggle } from "@/app/(app)/workspaces/[workspaceId]/settings/
 import { CreateOrganizationCard } from "@/app/(app)/workspaces/[workspaceId]/settings/organization/general/components/CreateOrganizationCard";
 import { DeleteOrganization } from "@/app/(app)/workspaces/[workspaceId]/settings/organization/general/components/DeleteOrganization";
 import { EditOrganizationSettingsForm } from "@/app/(app)/workspaces/[workspaceId]/settings/organization/general/components/EditOrganizationSettingsForm";
-import { SecurityListTip } from "@/app/(app)/workspaces/[workspaceId]/settings/organization/general/components/SecurityListTip";
 import { isInstanceAIConfigured } from "@/lib/ai/service";
 import {
   ENTERPRISE_LICENSE_REQUEST_FORM_URL,
@@ -61,7 +60,6 @@ const Page = async (props: Readonly<{ params: Promise<{ organizationId: string }
           </Alert>
         </div>
       )}
-      {!IS_FORMBRICKS_CLOUD && <SecurityListTip />}
       <SettingsCard
         title={t("workspace.settings.general.organization_settings")}
         description={t("workspace.settings.general.organization_settings_description")}>
