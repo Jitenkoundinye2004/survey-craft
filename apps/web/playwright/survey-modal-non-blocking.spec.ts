@@ -1,0 +1,372 @@
+import { expect } from "@playwright/test";
+import http from "http";
+import { type AddressInfo } from "net";
+import { test } from "./lib/fixtures";
+import { seedAppSurvey } from "./utils/app-survey";
+
+/**
+ * A corner survey with no overlay must not take anything from the page it sits on.
+ *
+ * The widget used to arm a full focus trap for every modal survey regardless of
+ * overlay (packages/surveys/src/components/wrappers/survey-container.tsx), so a
+ * bottom-right survey stole the caret, wiped text selections mid-drag, trapped Tab,
+ * claimed Escape and Cmd/Ctrl+Enter document-wide, and told screen readers to ignore
+ * the host page. Mouse clicks kept working the whole time, which is what made it hard
+ * to spot. These specs pin the non-blocking contract, and the overlay case pins the
+ * modal behaviour that must survive it — otherwise someone "simplifies" the gate away.
+ */
+
+declare global {
+  interface Window {
+    __workspaceId: string;
+    __hostEscapeDefaultPrevented: boolean | null;
+    __hostChordDefaultPrevented: boolean | null;
+    __cardRects: ({ x: number; y: number; width: number; height: number } | null)[];
+  }
+}
+
+// `window.formbricks` is typed by @formbricks/js as optional; the spec has already waited for it.
+const trackAction = (key: string) => {
+  if (!window.formbricks) throw new Error("Formbricks SDK is not loaded");
+  return window.formbricks.track(key);
+};
+
+// Prose long enough that a drag across it selects an unmistakable number of characters.
+const HOST_PROSE =
+  "The quick brown fox jumps over the lazy dog while the host page stays fully usable underneath.";
+
+// A constant page — the workspace is injected per test with `page.addInitScript` rather
+// than templated in, so nothing the test controls is ever interpolated into served HTML.
+const HOST_PAGE = `<!doctype html>
+<html>
+  <head>
+    <script type="text/javascript">
+      !(function () {
+        var t = document.createElement("script");
+        (t.type = "text/javascript"), (t.async = !0), (t.src = "http://localhost:3000/js/formbricks.umd.cjs");
+        t.onload = function () {
+          window.formbricks.setup({ workspaceId: window.__workspaceId, appUrl: "http://localhost:3000" });
+        };
+        var e = document.getElementsByTagName("script")[0];
+        e.parentNode.insertBefore(t, e);
+      })();
+    </script>
+  </head>
+  <body style="background-color: #fff; font-family: sans-serif">
+    <p id="prose" style="max-width: 480px">${HOST_PROSE}</p>
+    <input id="host-input" aria-label="Host input" />
+    <textarea id="host-textarea" aria-label="Host textarea"></textarea>
+    <button id="host-button" type="button" onclick="window.__hostButtonClicks=(window.__hostButtonClicks||0)+1">
+      Host button
+    </button>
+    <script>
+      window.__hostEscapeDefaultPrevented = null;
+      window.__hostChordDefaultPrevented = null;
+
+      // Stand in for a native SDK. Only the mobile SDKs pass \`onCardRectChange\` — a web host has
+      // no use for it, since CSS pointer-events already keeps a no-overlay survey from swallowing
+      // clicks. So there is no way to observe the contract through the normal widget path, and it
+      // is wrapped here instead. Worth the artificiality: this exact contract silently stopped
+      // firing for the Flutter SDK once (it scraped the DOM for the card, and an a11y fix moved the
+      // attribute it matched on), and nothing failed anywhere until a user reported a dead survey.
+      window.__cardRects = [];
+      // Stand in for a native SDK. Only the mobile SDKs pass \`onCardRectChange\` — a web host has no
+      // use for it, since CSS pointer-events already keeps a no-overlay survey from swallowing
+      // clicks. So the contract cannot be observed through the normal widget path and is wrapped
+      // here instead. Worth the artificiality: this contract silently stopped firing for the
+      // Flutter SDK once (it scraped the DOM for the card, and an a11y fix moved the attribute it
+      // matched on) and nothing failed anywhere until a user reported a dead survey.
+      //
+      // Installed as a setter rather than by polling for the global: js-core resolves its runtime
+      // load and calls renderSurvey in the same microtask chain, so a \`setTimeout\` poll loses the
+      // race and the first — only — render goes unwrapped.
+      (function () {
+        var runtime = null;
+        Object.defineProperty(window, "formbricksSurveys", {
+          configurable: true,
+          get: function () {
+            return runtime;
+          },
+          set: function (value) {
+            if (value && value.renderSurvey && !value.__rectPatched) {
+              value.__rectPatched = true;
+              var original = value.renderSurvey.bind(value);
+              value.renderSurvey = function (props) {
+                return original(
+                  Object.assign({}, props, {
+                    onCardRectChange: function (rect) {
+                      window.__cardRects.push(rect);
+                    },
+                  })
+                );
+              };
+            }
+            runtime = value;
+          },
+        });
+      })();
+      // Both reads are deferred to the next task. This listener is registered at page load
+      // and the survey's on mount, so on the same target in the same phase they fire in
+      // registration order — a synchronous read here always sees \`defaultPrevented === false\`
+      // no matter what the survey does. The event object outlives dispatch, so a deferred
+      // read observes the final state.
+      document.addEventListener("keydown", function (e) {
+        if (e.key === "Escape") {
+          setTimeout(function () {
+            window.__hostEscapeDefaultPrevented = e.defaultPrevented;
+          }, 0);
+        }
+        if ((e.metaKey || e.ctrlKey) && e.key === "Enter") {
+          // Read on the next task, not inline. Both this listener and the survey's live on
+          // \`document\` in the bubble phase, and this one was registered first (page load vs
+          // survey mount), so listeners fire in registration order and \`defaultPrevented\` is
+          // still false at this point in dispatch no matter what the survey does. The event
+          // object outlives dispatch, so a deferred read observes the final state.
+          setTimeout(function () {
+            window.__hostChordDefaultPrevented = e.defaultPrevented;
+          }, 0);
+        }
+      });
+    </script>
+  </body>
+</html>`;
+
+test.describe("App survey widget does not block the host page", () => {
+  let server: http.Server;
+  let hostUrl = "";
+
+  test.setTimeout(3 * 60 * 1000);
+
+  // The port is ephemeral so parallel workers do not fight over it, and the response is
+  // a constant so the server holds no per-test state.
+  test.beforeAll(async () => {
+    server = http.createServer((_, res) => {
+      res.writeHead(200, { "Content-Type": "text/html" });
+      res.end(HOST_PAGE);
+    });
+    await new Promise<void>((resolve) => {
+      server.listen(0, () => {
+        hostUrl = `http://localhost:${(server.address() as AddressInfo).port}`;
+        resolve();
+      });
+    });
+  });
+
+  test.afterAll(async () => {
+    await new Promise((resolve) => server.close(resolve));
+  });
+
+  test("overlay:none leaves the host page fully usable", async ({ page, users }) => {
+    const seeded = await seedAppSurvey(users, { overlay: "none", placement: "bottomRight" });
+
+    await page.addInitScript((workspaceId) => {
+      window.__workspaceId = workspaceId;
+    }, seeded.workspaceId);
+    await page.goto(hostUrl);
+    await page.waitForFunction(() => Boolean(window.formbricks), null, { timeout: 120000 });
+
+    // The status region is mounted at SDK setup — long before any survey opens — because screen
+    // readers only reliably announce changes to a live region that already existed.
+    const liveRegion = page.locator("#formbricks-live-region");
+    await expect(liveRegion).toBeAttached({ timeout: 120000 });
+    await expect(liveRegion).toHaveAttribute("role", "status");
+    await expect(liveRegion).toBeEmpty();
+
+    // Park the caret in a host field first — this is the customer's scenario: a survey
+    // firing mid-form must not pull the user out of what they are typing.
+    await page.locator("#host-input").fill("BEFORE");
+
+    await page.evaluate(trackAction, seeded.actionKey);
+
+    const dialog = page.locator("#fbjs [role='dialog']");
+    await expect(dialog).toBeVisible({ timeout: 120000 });
+    // The card fades in over 500ms (survey-container.tsx); opacity 1 marks the survey fully open, by
+    // which point any mount-time focus move has had its chance to land.
+    await expect(dialog).toHaveCSS("opacity", "1");
+
+    // The card's rect reaches the host. A native host embeds this renderer in a full-screen WebView
+    // that hit-tests its whole rectangle no matter what CSS says, so without this it cannot tell
+    // which touches belong to the survey and which belong to the app underneath — and it has no way
+    // to work the card's position out for itself.
+    // Both values are read in the same browser frame, inside the poll. The first report can land
+    // while the card is still settling, so reading the report and the DOM in separate round-trips
+    // compares two different animation states. Tolerance is 2px because the rect is deduped on
+    // whole pixels.
+    await expect
+      .poll(
+        () =>
+          page.evaluate(() => {
+            const reported = window.__cardRects.filter((r) => r !== null);
+            const latest = reported[reported.length - 1];
+            const card = document.querySelector("#fbjs [role='dialog']");
+            if (!latest || !card) return Number.POSITIVE_INFINITY;
+            const box = card.getBoundingClientRect();
+            return Math.max(
+              Math.abs(latest.x - box.left),
+              Math.abs(latest.y - box.top),
+              Math.abs(latest.width - box.width),
+              Math.abs(latest.height - box.height)
+            );
+          }),
+        { timeout: 30000 }
+      )
+      .toBeLessThanOrEqual(2);
+
+    // The survey must not have taken the caret.
+    await expect(page.locator("#host-input")).toBeFocused();
+    await page.keyboard.type("-AFTER");
+    await expect(page.locator("#host-input")).toHaveValue("BEFORE-AFTER");
+
+    // A survey that does not block the page must not claim to be a modal dialog:
+    // aria-modal makes assistive tech ignore everything outside it.
+    await expect(dialog).not.toHaveAttribute("aria-modal", /.*/);
+
+    // It takes nothing from the page, so the open is announced through the pre-existing status
+    // region instead of a focus move — otherwise screen-reader users get no signal it appeared.
+    // The message states where the survey is (the widget mounts last in <body>) rather than
+    // promising a keystroke: Tab follows DOM order, so one Tab press would not reach it.
+    await expect(liveRegion).toHaveText("A survey has opened at the end of the page.");
+
+    // Text on the host page must stay selectable — the focus trap used to wipe the
+    // selection ~17ms into the drag by pulling focus back into the survey.
+    const prose = page.locator("#prose");
+    const box = await prose.boundingBox();
+    if (!box) throw new Error("host prose has no bounding box");
+    // Drag corner to corner so the selection covers every line wherever the text wraps. A
+    // horizontal drag through the middle samples only the last wrapped line, whose length is
+    // a function of the machine's fonts (measured: 30 chars at 16px, 18 at 14px).
+    const startY = box.y + 4;
+    const endY = box.y + box.height - 4;
+    await page.mouse.move(box.x + 2, startY);
+    await page.mouse.down();
+    for (let step = 1; step <= 6; step++) {
+      await page.mouse.move(box.x + 2 + ((box.width - 6) * step) / 6, startY + ((endY - startY) * step) / 6, {
+        steps: 3,
+      });
+    }
+    await page.mouse.up();
+    expect(await page.evaluate(() => String(window.getSelection() ?? ""))).toBe(HOST_PROSE);
+    // Pin the mechanism, not just the effect: the trap wiped the selection by pulling focus
+    // into the survey mid-drag.
+    expect(
+      await page.evaluate(() => Boolean(document.getElementById("fbjs")?.contains(document.activeElement)))
+    ).toBe(false);
+
+    // Tab must be able to move through the host page instead of cycling in the survey.
+    await page.locator("#host-input").focus();
+    await page.keyboard.press("Tab");
+    await expect(page.locator("#host-textarea")).toBeFocused();
+
+    // Escape belongs to the host page while focus is on the host page: the survey neither
+    // closes on it nor cancels it.
+    await page.keyboard.press("Escape");
+    await expect(dialog).toBeVisible();
+    await expect.poll(() => page.evaluate(() => window.__hostEscapeDefaultPrevented)).toBe(false);
+
+    // Same for the Cmd/Ctrl+Enter chord: the survey must neither cancel it nor act on it.
+    const surveyInput = page.locator("#fbjs input[type='text'], #fbjs textarea").first();
+    await expect(surveyInput).toBeVisible();
+    await page.locator("#host-textarea").focus();
+    await page.keyboard.press("ControlOrMeta+Enter");
+    await expect.poll(() => page.evaluate(() => window.__hostChordDefaultPrevented)).toBe(false);
+    // And the survey must still be on the question card. Asserting the dialog is visible is
+    // not enough: submitting advances to the ending card, which has no text input but still
+    // matches [role="dialog"].
+    await expect(surveyInput).toBeVisible();
+
+    // The survey itself is still fully usable — it just does not grab anything.
+    await surveyInput.click();
+    await surveyInput.fill("still works");
+    await expect(surveyInput).toHaveValue("still works");
+
+    // Reported again when the viewport changes. Every assertion above is satisfied by a single
+    // report on open, so without this the resize listener could be deleted and nothing would go
+    // red — leaving a host masking touches to where the card used to be after a rotation.
+    const xBeforeResize = await page.evaluate(() => {
+      const reported = window.__cardRects.filter((r) => r !== null);
+      return Math.round(reported[reported.length - 1]!.x);
+    });
+
+    await page.setViewportSize({ width: 900, height: 700 });
+
+    // Assert the reported geometry moved with the viewport, not merely that another report
+    // arrived. A count alone would also be satisfied by a stray sample from the opening
+    // animation, so it would not pin the resize listener at all.
+    await expect
+      .poll(
+        () =>
+          page.evaluate((previousX) => {
+            const reported = window.__cardRects.filter((r) => r !== null);
+            const latest = reported[reported.length - 1];
+            const card = document.querySelector("#fbjs [role='dialog']");
+            if (!latest || !card) return false;
+            const box = card.getBoundingClientRect();
+            const tracksCard = Math.abs(latest.x - box.left) <= 2 && Math.abs(latest.width - box.width) <= 2;
+            return tracksCard && Math.round(latest.x) !== previousX;
+          }, xBeforeResize),
+        { timeout: 30000 }
+      )
+      .toBe(true);
+
+    // No two consecutive reports are identical. The card animates over 500ms and the rect is
+    // sampled per frame, so without the whole-pixel dedupe a native host takes roughly thirty
+    // bridge hops per open instead of a handful.
+    const hasRepeatedReport = await page.evaluate(() => {
+      const key = (r: (typeof window.__cardRects)[number]) =>
+        r ? [r.x, r.y, r.width, r.height].map(Math.round).join(",") : "none";
+      return window.__cardRects.some((r, i) => i > 0 && key(r) === key(window.__cardRects[i - 1]));
+    });
+    expect(hasRepeatedReport).toBe(false);
+
+    // Escape closes the survey when focus is inside it.
+    await page.keyboard.press("Escape");
+    await expect(dialog).toBeHidden();
+
+    // Closing clears the announcement: identical text twice is not a change, so without the clear
+    // a later open would stay silent.
+    await expect(liveRegion).toBeEmpty();
+
+    // And the host is told the card has gone. Without this last report it would keep masking
+    // touches to a rect that is no longer on screen, leaving a dead patch over the app.
+    await expect
+      .poll(() => page.evaluate(() => window.__cardRects[window.__cardRects.length - 1]), {
+        timeout: 30000,
+      })
+      .toBeNull();
+  });
+
+  test("overlay:dark keeps the modal behaviour", async ({ page, users }) => {
+    const seeded = await seedAppSurvey(users, { overlay: "dark", placement: "center" });
+
+    await page.addInitScript((workspaceId) => {
+      window.__workspaceId = workspaceId;
+    }, seeded.workspaceId);
+    await page.goto(hostUrl);
+    await page.waitForFunction(() => Boolean(window.formbricks), null, { timeout: 120000 });
+
+    await page.locator("#host-input").fill("BEFORE");
+    await page.evaluate(trackAction, seeded.actionKey);
+
+    const dialog = page.locator("#fbjs [role='dialog']");
+    await expect(dialog).toBeVisible({ timeout: 120000 });
+    // Same observable wait as the no-overlay spec: fully faded in means the trap has armed and focused.
+    await expect(dialog).toHaveCSS("opacity", "1");
+
+    // A survey that does block the page is a real modal: it announces itself as one,
+    // takes focus, and keeps it.
+    await expect(dialog).toHaveAttribute("aria-modal", "true");
+    expect(
+      await page.evaluate(() => Boolean(document.getElementById("fbjs")?.contains(document.activeElement)))
+    ).toBe(true);
+
+    await page.locator("#host-input").focus();
+    const focusStayedInSurvey = await page.evaluate(() =>
+      Boolean(document.getElementById("fbjs")?.contains(document.activeElement))
+    );
+    expect(focusStayedInSurvey).toBe(true);
+
+    // With an overlay the trap's focus move is the announcement — the status region stays silent
+    // so screen readers don't hear the open twice.
+    await expect(page.locator("#formbricks-live-region")).toBeEmpty();
+  });
+});

@@ -1,0 +1,218 @@
+import { useEffect, useMemo, useRef, useState } from "preact/hooks";
+import type { JSX } from "react";
+import { FB_PART } from "@formbricks/survey-ui/parts";
+import { type TPlacement } from "@formbricks/types/common";
+import { type TJsWorkspaceStateSurvey } from "@formbricks/types/js";
+import { type TCardArrangementOptions } from "@formbricks/types/styling";
+import { TSurveyStyling } from "@formbricks/types/surveys/types";
+import { type TWorkspaceStyling } from "@formbricks/types/workspace";
+import { isEndSlotEmpty, isSlotRendered } from "@/lib/end-slot";
+import { cn } from "@/lib/utils";
+import { StackedCard } from "./stacked-card";
+
+// offset = 0 -> Current block card
+// offset < 0 -> Block cards that are already answered
+// offset > 0 -> Blocks that aren't answered yet
+interface StackedCardsContainerProps {
+  cardArrangement: TCardArrangementOptions;
+  currentBlockId: string;
+  survey: TJsWorkspaceStateSurvey;
+  getCardContent: (blockIdx: number, offset: number) => JSX.Element | undefined;
+  styling: TWorkspaceStyling | TSurveyStyling;
+  setBlockId: (blockId: string) => void;
+  shouldResetBlockId?: boolean;
+  fullSizeCards: boolean;
+  placement?: TPlacement;
+  hasError: boolean;
+}
+
+export function StackedCardsContainer({
+  cardArrangement,
+  currentBlockId,
+  survey,
+  getCardContent,
+  styling,
+  setBlockId,
+  shouldResetBlockId = true,
+  fullSizeCards = false,
+  placement = "bottomRight",
+  hasError,
+}: Readonly<StackedCardsContainerProps>) {
+  const [hovered, setHovered] = useState(false);
+  const highlightBorderColor = survey.styling?.overwriteThemeStyling
+    ? survey.styling?.highlightBorderColor?.light
+    : styling.highlightBorderColor?.light;
+  const cardBorderColor = survey.styling?.overwriteThemeStyling
+    ? survey.styling?.cardBorderColor?.light
+    : styling.cardBorderColor?.light;
+  const cardRefs = useRef<(HTMLDivElement | null)[]>([]);
+  const resizeObserver = useRef<ResizeObserver | null>(null);
+  const [cardHeight, setCardHeight] = useState("auto");
+  const [cardWidth, setCardWidth] = useState<number>(0);
+  const isCardless = cardArrangement === "cardless";
+
+  const blockIdxTemp = useMemo(() => {
+    if (currentBlockId === "start") return survey.welcomeCard.enabled ? -1 : 0;
+
+    if (!survey.blocks.map((block) => block.id).includes(currentBlockId)) {
+      return survey.blocks.length;
+    }
+
+    return survey.blocks.findIndex((block) => block.id === currentBlockId);
+  }, [currentBlockId, survey]);
+
+  const endSlotInput = {
+    blockCount: survey.blocks.length,
+    endingCount: survey.endings.length,
+    blockIdx: blockIdxTemp,
+    hasError,
+  };
+  // A finished survey without an ending card collapses instead of leaving a blank card (ENG-4069)
+  const endSlotEmpty = isEndSlotEmpty(endSlotInput);
+
+  const [prevBlockIdx, setPrevBlockIdx] = useState(blockIdxTemp - 1);
+  const [currentBlockIdx, setCurrentBlockIdx] = useState(blockIdxTemp);
+  const [nextBlockIdx, setNextBlockIdx] = useState(blockIdxTemp + 1);
+  const [visitedBlocks, setVisitedBlocks] = useState<number[]>([]);
+
+  useEffect(() => {
+    if (blockIdxTemp > currentBlockIdx) {
+      // Next button is clicked
+      setPrevBlockIdx(currentBlockIdx);
+      setCurrentBlockIdx(blockIdxTemp);
+      setNextBlockIdx(blockIdxTemp + 1);
+      setVisitedBlocks((prev) => {
+        return [...prev, currentBlockIdx];
+      });
+    } else if (blockIdxTemp < currentBlockIdx) {
+      // Back button is clicked
+      setNextBlockIdx(currentBlockIdx);
+      setCurrentBlockIdx(blockIdxTemp);
+
+      // Compute new visited stack and safe previous index
+      const newStack = visitedBlocks.length > 0 ? visitedBlocks.slice(0, -1) : [];
+      const safePrevIdx = newStack.length > 0 ? newStack[newStack.length - 1] : Math.max(0, blockIdxTemp - 1);
+
+      setPrevBlockIdx(safePrevIdx);
+      setVisitedBlocks(newStack);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- Only update when blockIdxTemp changes
+  }, [blockIdxTemp]);
+
+  const borderStyles = useMemo(() => {
+    const baseStyle = {
+      border: "1px solid",
+      borderRadius: "var(--fb-border-radius)",
+    };
+    // Determine borderColor based on the survey type and availability of highlightBorderColor
+    // Read through variables so the dark palette can replace the colors; light mode falls back to
+    // the same literal values as before (ENG-2939).
+    const cardBorder = cardBorderColor ? `var(--fb-card-border-color, ${cardBorderColor})` : undefined;
+    const borderColor =
+      survey.type === "link" || !highlightBorderColor
+        ? cardBorder
+        : `var(--fb-highlight-border-color, ${highlightBorderColor})`;
+    return {
+      ...baseStyle,
+      borderColor,
+    };
+  }, [survey.type, cardBorderColor, highlightBorderColor]);
+
+  // UseEffect to handle the resize of current block card and set cardHeight accordingly
+  useEffect(() => {
+    let resizeTimeout: NodeJS.Timeout;
+
+    const handleDebouncedResize = (entries: ResizeObserverEntry[]) => {
+      clearTimeout(resizeTimeout);
+      resizeTimeout = setTimeout(() => {
+        for (const entry of entries) {
+          setCardHeight(`${entry.contentRect.height.toString()}px`);
+          setCardWidth(entry.contentRect.width);
+        }
+      }, 50); // 50ms debounce
+    };
+
+    const timer = setTimeout(() => {
+      const currentElement = cardRefs.current[blockIdxTemp];
+      if (currentElement) {
+        if (resizeObserver.current) {
+          resizeObserver.current.disconnect();
+        }
+
+        resizeObserver.current = new ResizeObserver((entries) => {
+          handleDebouncedResize(entries);
+        });
+        resizeObserver.current.observe(currentElement);
+      }
+    }, 0);
+
+    return () => {
+      resizeObserver.current?.disconnect();
+      clearTimeout(timer);
+      clearTimeout(resizeTimeout);
+    };
+    // hasError: the end slot of a survey without an ending card only mounts once an error shows
+  }, [blockIdxTemp, cardArrangement, cardRefs, hasError]);
+
+  // Reset block progress, when card arrangement changes
+  useEffect(() => {
+    if (shouldResetBlockId) {
+      setBlockId(survey.welcomeCard.enabled ? "start" : survey.blocks[0].id);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- Only update when cardArrangement changes
+  }, [cardArrangement]);
+
+  return (
+    <div // NOSONAR - hover handlers are for visual feedback on card animation, not interactive content
+      data-testid="stacked-cards-container"
+      className={cn("relative flex justify-center", isCardless ? "w-full" : "h-full items-center")}
+      onMouseEnter={() => {
+        setHovered(true);
+      }}
+      onMouseLeave={() => {
+        setHovered(false);
+      }}>
+      {(cardArrangement === "straight" || cardArrangement === "casual") && (
+        <div style={{ height: endSlotEmpty ? 0 : cardHeight }} />
+      )}
+      {cardArrangement === "simple" || isCardless
+        ? !endSlotEmpty && (
+            <div
+              id={`questionCard-${blockIdxTemp.toString()}`}
+              data-testid={`questionCard-${blockIdxTemp.toString()}`}
+              // Public styling hook (ENG-3554). A cardless layout has no card surface to style.
+              data-fb-part={isCardless ? undefined : FB_PART.card}
+              className={cn(
+                "w-full",
+                !isCardless && "bg-survey-bg overflow-hidden",
+                fullSizeCards && !isCardless ? "h-full" : ""
+              )}
+              style={isCardless ? undefined : borderStyles}>
+              {getCardContent(blockIdxTemp, 0)}
+            </div>
+          )
+        : [prevBlockIdx, currentBlockIdx, nextBlockIdx, nextBlockIdx + 1].map((dynamicBlockIndex, index) => {
+            // Check for hiding extra card
+            if (!isSlotRendered(dynamicBlockIndex, endSlotInput)) return;
+            const offset = index - 1;
+            return (
+              <StackedCard
+                key={dynamicBlockIndex}
+                cardRefs={cardRefs}
+                dynamicQuestionIndex={dynamicBlockIndex}
+                offset={offset}
+                fullSizeCards={fullSizeCards}
+                borderStyles={borderStyles}
+                getCardContent={getCardContent}
+                cardHeight={cardHeight}
+                survey={survey}
+                cardWidth={cardWidth}
+                hovered={hovered}
+                cardArrangement={cardArrangement}
+                placement={placement}
+              />
+            );
+          })}
+    </div>
+  );
+}

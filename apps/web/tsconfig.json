@@ -1,0 +1,23 @@
+{
+  "compilerOptions": {
+    // For one import only: the SAML parse worker (modules/ee/auth/saml/lib/saml-parse-worker.ts) also runs as a plain
+    // Node worker thread in unit tests, where a relative import needs its .ts extension. Elsewhere, import without it.
+    "allowImportingTsExtensions": true,
+    "baseUrl": ".",
+    "jsx": "preserve",
+    "jsxImportSource": "react",
+    "paths": {
+      "@/*": ["./*"]
+    },
+    "plugins": [
+      {
+        "name": "next"
+      }
+    ],
+    "skipLibCheck": true,
+    "strictNullChecks": true
+  },
+  "exclude": ["../../.env", "node_modules", "integration"],
+  "extends": "@formbricks/config-typescript/nextjs.json",
+  "include": ["next-env.d.ts", "**/*.ts", "**/*.tsx", ".next/types/**/*.ts", "../../packages/types/*.d.ts"]
+}
