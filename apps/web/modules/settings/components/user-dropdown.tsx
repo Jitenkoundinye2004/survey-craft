@@ -146,7 +146,7 @@ export const UserDropdown = ({
               callbackUrl: loginUrl,
               clearWorkspaceId: true,
             });
-            router.push(route?.url || loginUrl);
+            window.location.href = route?.url || loginUrl;
           }}
           icon={<LogOutIcon className="mr-2 size-4" strokeWidth={1.5} />}>
           {t("common.logout")}

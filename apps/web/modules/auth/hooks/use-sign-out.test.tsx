@@ -133,12 +133,23 @@ describe("useSignOut", () => {
   });
 
   test("logs and still signs out when the audit action returns a server error", async () => {
-    mockedLogSignOut.mockResolvedValueOnce({ serverError: "Not authenticated" });
+    mockedLogSignOut.mockResolvedValueOnce({ serverError: "Internal database error" });
     const { signOut } = useSignOut({ id: "u", email: "e@x.com" });
 
     await signOut();
 
     expect(loggerError).toHaveBeenCalled();
+    expect(baSignOut).toHaveBeenCalledTimes(1);
+    expect(window.location.href).toBe("/auth/login");
+  });
+
+  test("skips logging error and still signs out when the session is already unauthenticated", async () => {
+    mockedLogSignOut.mockResolvedValueOnce({ serverError: "Not authenticated" });
+    const { signOut } = useSignOut({ id: "u", email: "e@x.com" });
+
+    await signOut();
+
+    expect(loggerError).not.toHaveBeenCalled();
     expect(baSignOut).toHaveBeenCalledTimes(1);
     expect(window.location.href).toBe("/auth/login");
   });

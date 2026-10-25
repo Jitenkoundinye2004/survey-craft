@@ -42,17 +42,30 @@ export const useSignOut = (sessionUser?: SessionUser | null) => {
           organizationId: options?.organizationId,
         });
         if (result?.serverError || result?.validationErrors) {
-          logger.error(
-            new Error(result.serverError ?? "Invalid sign out audit input"),
-            "Failed to log signOut event"
-          );
+          // If the server reported unauthenticated, the session was already expired or terminated — this is not an error
+          if (
+            result.serverError === "Not authenticated" ||
+            result.serverError?.includes("Not authenticated")
+          ) {
+            // Gracefully ignore: session is already unauthenticated or expired
+          } else {
+            logger.error(
+              new Error(result.serverError ?? "Invalid sign out audit input"),
+              "Failed to log signOut event"
+            );
+          }
         }
       } catch (error) {
         // Don't block signOut if audit logging fails
-        logger.error(
-          error instanceof Error ? error : new Error(String(error)),
-          "Failed to log signOut event"
-        );
+        const errorMsg = error instanceof Error ? error.message : String(error);
+        if (errorMsg === "Not authenticated" || errorMsg.includes("Not authenticated")) {
+          // Gracefully ignore: session is already unauthenticated or expired
+        } else {
+          logger.error(
+            error instanceof Error ? error : new Error(String(error)),
+            "Failed to log signOut event"
+          );
+        }
       }
     }
 
