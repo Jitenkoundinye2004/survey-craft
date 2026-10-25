@@ -1,6 +1,7 @@
 "use client";
 
 import { zodResolver } from "@hookform/resolvers/zod";
+import { Sparkles } from "lucide-react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -240,6 +241,19 @@ export const LoginForm = ({
     <FormProvider {...form}>
       <div className="text-center">
         <h1 className="mb-4 text-xl font-semibold text-balance text-slate-800">{formLabel}</h1>
+        <div className="mb-4">
+          <button
+            type="button"
+            onClick={() => {
+              form.setValue("email", "admin@surveycraft.dev");
+              form.setValue("password", "Password#123");
+              toast.success("Demo credentials loaded!");
+            }}
+            className="inline-flex cursor-pointer items-center gap-1.5 rounded-lg border border-teal-200 bg-teal-50 px-3 py-1.5 text-xs font-semibold text-teal-800 shadow-2xs transition hover:scale-105 hover:bg-teal-100 active:scale-95">
+            <Sparkles className="size-3.5 text-teal-600" />
+            <span>✨ Fill Demo Admin Credentials</span>
+          </button>
+        </div>
         {emailJustVerified && (
           <Alert variant="success" className="mb-4 text-left" role="status">
             <AlertTitle>{t("auth.login.email_verified_sign_in_title")}</AlertTitle>

@@ -79,7 +79,9 @@ export const SignupForm = ({
   turnstileSiteKey,
   isFormbricksCloud,
 }: Readonly<SignupFormProps>) => {
-  const [showLogin, setShowLogin] = useState(false);
+  const [showLogin, setShowLogin] = useState(
+    !googleOAuthEnabled && !githubOAuthEnabled && !azureOAuthEnabled && !oidcOAuthEnabled && !samlSsoEnabled
+  );
   const searchParams = useSearchParams();
   const { t } = useTranslation();
   const inviteToken = searchParams?.get("inviteToken");

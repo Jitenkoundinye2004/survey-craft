@@ -72,7 +72,7 @@ export const LoginPage = async ({
   const inviteToken = getInviteTokenFromCallbackUrl(resolvedCallbackUrl, WEBAPP_URL);
 
   return (
-    <FormWrapper>
+    <FormWrapper activeTab="login">
       <LoginForm
         emailAuthEnabled={EMAIL_AUTH_ENABLED}
         publicSignUpEnabled={SIGNUP_ENABLED}
