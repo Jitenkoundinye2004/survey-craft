@@ -12,8 +12,7 @@ import { getProxySession } from "@/modules/auth/lib/proxy-session";
 const handleAuth = async (request: NextRequest): Promise<NextResponse | null> => {
   const session = await getProxySession(request);
 
-  if ((isAuthProtectedRoute(request.nextUrl.pathname) || request.nextUrl.pathname === "/") && !session) {
-    if (request.nextUrl.pathname === "/") return NextResponse.redirect(`${WEBAPP_URL}/auth/login`);
+  if (isAuthProtectedRoute(request.nextUrl.pathname) && !session) {
     const loginUrl = `${WEBAPP_URL}/auth/login?callbackUrl=${encodeURIComponent(WEBAPP_URL + request.nextUrl.pathname + request.nextUrl.search)}`;
     return NextResponse.redirect(loginUrl);
   }

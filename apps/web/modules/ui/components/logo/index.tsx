@@ -1,7 +1,16 @@
 export const Logo = (props: any) => {
   return (
     <svg viewBox="0 0 697 150" fill="none" xmlns="http://www.w3.org/2000/svg" {...props}>
-      <text x="160" y="98" font-family="system-ui, -apple-system, sans-serif" font-size="62" font-weight="800" letter-spacing="-1"><tspan fill="#0F172A">Survey</tspan><tspan fill="#00C4B8">Craft</tspan></text>
+      <text
+        x="160"
+        y="98"
+        fontFamily="system-ui, -apple-system, sans-serif"
+        fontSize="62"
+        fontWeight="800"
+        letterSpacing="-1">
+        <tspan fill="#0F172A">Survey</tspan>
+        <tspan fill="#00C4B8">Craft</tspan>
+      </text>
       <path
         d="M21 93.6416H46.3585V106.321C46.3585 113.323 40.6818 119 33.6792 119C26.6767 119 21 113.323 21 106.321V93.6416Z"
         fill="url(#paint0_linear_2810_6010)"
