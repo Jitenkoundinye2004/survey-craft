@@ -15,7 +15,7 @@ interface TParsedPrismaPgConfig {
 }
 
 /** pg-pool's acquire timeout when `DATABASE_URL` carries no `connect_timeout`. */
-export const DEFAULT_POOL_ACQUIRE_TIMEOUT_MS = 5_000;
+export const DEFAULT_POOL_ACQUIRE_TIMEOUT_MS = 30_000;
 
 const IDLE_IN_TRANSACTION_SESSION_TIMEOUT_PARAM = "idle_in_transaction_session_timeout";
 // Postgres stores the setting as a 32-bit int of milliseconds and refuses the connection otherwise.

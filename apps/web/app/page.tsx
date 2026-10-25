@@ -67,7 +67,7 @@ const Page = async () => {
     return redirect(`/organizations/${userOrganizations[0].id}/landing`);
   }
 
-  return <ClientWorkspaceRedirect userWorkspaceIds={allWorkspaceIds} />;
+  return redirect(`/workspaces/${allWorkspaceIds[0]}/surveys`);
 };
 
 export default Page;
