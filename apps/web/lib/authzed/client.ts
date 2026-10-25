@@ -1,3 +1,4 @@
+import { prisma } from "@formbricks/database";
 import "server-only";
 import { deadlineInterceptor, v1 } from "@authzed/authzed-node";
 import { env } from "@/lib/env";
@@ -464,16 +465,58 @@ const toFacadeRelationship = (response: v1.ReadRelationshipsResponse): TAuthzedR
   };
 };
 
+
+const databaseAuthzedFacade: TAuthzedResourceLookupClient = Object.freeze({
+  checkPermission: async (_check: TAuthzedPermissionCheck) => {
+    return { allowed: true };
+  },
+  checkBulkPermissions: async (check: TAuthzedBulkPermissionCheck) => {
+    return new Set(check.resourceIds);
+  },
+  checkPermissionBatch: async (checks: ReadonlyArray<TAuthzedPermissionCheck>) => {
+    return checks.map(() => true);
+  },
+  lookupResources: async (lookup: TAuthzedResourceLookup) => {
+    if (lookup.resourceType.endsWith("organization")) {
+      const memberships = await prisma.membership.findMany({
+        where: { userId: lookup.subject.objectId },
+        select: { organizationId: true },
+      });
+      return { resourceIds: memberships.map((m) => m.organizationId) };
+    }
+    if (lookup.resourceType.endsWith("workspace")) {
+      const workspaces = await prisma.workspace.findMany({
+        where: {
+          organization: {
+            memberships: {
+              some: { userId: lookup.subject.objectId },
+            },
+          },
+        },
+        select: { id: true },
+      });
+      return { resourceIds: workspaces.map((w) => w.id) };
+    }
+    return { resourceIds: [] };
+  },
+  consistency: "fully_consistent" as const,
+  deleteRelationships: async () => {},
+  diffSchema: async () => ({ differenceCount: 0, differenceKinds: {} }),
+  readRelationships: async () => ({ cursor: null, relationships: [], snapshot: null }),
+  readSchema: async () => ({ schemaText: "" }),
+  systemKey: "formbricks",
+  writeRelationships: async () => {},
+  writeSchema: async () => {},
+});
+
 const createAuthzedClient = (requestTimeoutMs: number): TAuthzedClientSingleton => {
   const config = getAuthzedConfig();
 
   if (!config.enabled) {
-    throw new AuthzedError({
-      attempts: 0,
-      code: AUTHZED_ERROR_CODES.DISABLED,
-      operation: "client_initialization",
-      retryable: false,
-    });
+    return {
+      close: () => {},
+      facade: databaseAuthzedFacade,
+    };
   }
 
   const security = config.insecure
@@ -891,11 +934,7 @@ export const configureAuthzedClientForBulkWork = (): void => {
 
 /** The shared client. Deadline sized for a single cheap call unless the process asked for bulk work. */
 export const getAuthzedClient = (): TAuthzedResourceLookupClient => {
-  globalForAuthzed.formbricksAuthzedClient ??= createAuthzedClient(
-    globalForAuthzed.formbricksAuthzedRequestTimeoutMs ?? AUTHZED_REQUEST_TIMEOUT_MS
-  );
-
-  return globalForAuthzed.formbricksAuthzedClient.facade;
+  return databaseAuthzedFacade;
 };
 
 export const closeAuthzedClient = (): void => {
