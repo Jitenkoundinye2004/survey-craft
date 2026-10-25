@@ -41,7 +41,14 @@ export const isIntegrationRoute = (url: string): boolean => {
 
 export const isAuthProtectedRoute = (url: string): boolean => {
   // List of routes that require authentication
-  const protectedRoutes = ["/environments", "/setup/organization", "/organizations"];
+  const protectedRoutes = [
+    "/environments",
+    "/setup/organization",
+    "/organizations",
+    "/workspaces",
+    "/account",
+    "/billing-confirmation",
+  ];
 
   return protectedRoutes.some((route) => url.startsWith(route));
 };

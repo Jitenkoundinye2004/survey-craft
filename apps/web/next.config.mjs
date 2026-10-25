@@ -194,6 +194,27 @@ const nextConfig = {
         destination: "/legacy-organization-settings/:workspaceId/:path*",
         permanent: false,
       },
+      // Redirect legacy feedback-data and analysis URLs to modern v6 unify and dashboards
+      {
+        source: "/workspaces/:workspaceId/feedback-data",
+        destination: "/workspaces/:workspaceId/unify/sources",
+        permanent: true,
+      },
+      {
+        source: "/workspaces/:workspaceId/feedback-data/:path*",
+        destination: "/workspaces/:workspaceId/unify/:path*",
+        permanent: true,
+      },
+      {
+        source: "/workspaces/:workspaceId/analysis",
+        destination: "/workspaces/:workspaceId/dashboards",
+        permanent: true,
+      },
+      {
+        source: "/workspaces/:workspaceId/analysis/:path*",
+        destination: "/workspaces/:workspaceId/dashboards/:path*",
+        permanent: true,
+      },
     ];
   },
   async headers() {

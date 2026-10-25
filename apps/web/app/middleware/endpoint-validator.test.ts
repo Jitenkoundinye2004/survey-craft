@@ -259,6 +259,12 @@ describe("endpoint-validator", () => {
       expect(isAuthProtectedRoute("/organizations")).toBe(true);
       expect(isAuthProtectedRoute("/organizations/something")).toBe(true);
       expect(isAuthProtectedRoute("/organizations/123/settings")).toBe(true);
+      expect(isAuthProtectedRoute("/workspaces")).toBe(true);
+      expect(isAuthProtectedRoute("/workspaces/clseedworkspace000000000/surveys")).toBe(true);
+      expect(isAuthProtectedRoute("/workspaces/123/settings")).toBe(true);
+      expect(isAuthProtectedRoute("/account")).toBe(true);
+      expect(isAuthProtectedRoute("/account/settings/profile")).toBe(true);
+      expect(isAuthProtectedRoute("/billing-confirmation")).toBe(true);
     });
 
     test("should return false for non-protected routes", () => {
