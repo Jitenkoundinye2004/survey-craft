@@ -46,15 +46,11 @@ export const getJobsQueueingConfig = (): JobsQueueingConfig => {
 };
 
 export const getJobsWorkerBootstrapConfig = (): JobsWorkerBootstrapConfig => {
-  if (!BULLMQ_WORKER_ENABLED) {
+  if (!BULLMQ_WORKER_ENABLED || !env.REDIS_URL) {
     return {
       enabled: false,
       runtimeOptions: null,
     };
-  }
-
-  if (!env.REDIS_URL) {
-    throw new Error("REDIS_URL is required to start the BullMQ worker");
   }
 
   return {

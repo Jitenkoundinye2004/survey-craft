@@ -703,10 +703,7 @@ const parsedEnv = createEnv({
     OIDC_ISSUER: z.string().optional(),
     OIDC_SIGNING_ALGORITHM: z.string().optional(),
     REDIS_TLS_CA: z.string().min(1).optional(),
-    REDIS_URL:
-      process.env.NODE_ENV === "test"
-        ? z.string().optional()
-        : z.url("REDIS_URL is required for caching, rate limiting, and audit logging"),
+    REDIS_URL: z.string().optional(),
     PASSWORD_HIBP_CHECK_DISABLED: z.enum(["1", "0"]).optional(),
     PASSWORD_RESET_DISABLED: z.enum(["1", "0"]).optional(),
     PASSWORD_RESET_TOKEN_LIFETIME_MINUTES: z.coerce.number().int().min(5).max(120).optional().default(30),

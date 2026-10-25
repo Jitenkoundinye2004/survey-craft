@@ -12,6 +12,21 @@ import {
 } from "@/lib/env";
 import { tagRequestErrorWithUser } from "@/lib/sentry/request-error-user";
 
+// Next.js Turbopack Flight deserializer bug: `new AggregateError(null)` crashes if revived errors is null.
+if (typeof globalThis.AggregateError !== "undefined") {
+  const OriginalAggregateError = globalThis.AggregateError;
+  class SafeAggregateError extends OriginalAggregateError {
+    constructor(errors: unknown, message?: string, options?: ErrorOptions) {
+      const iterableErrors =
+        Array.isArray(errors) || (errors && typeof (errors as Iterable<unknown>)[Symbol.iterator] === "function")
+          ? (errors as Iterable<unknown>)
+          : [];
+      super(iterableErrors, message, options);
+    }
+  }
+  globalThis.AggregateError = SafeAggregateError as typeof AggregateError;
+}
+
 export const onRequestError: Instrumentation.onRequestError = async (...args) => {
   const [error, request] = args;
 

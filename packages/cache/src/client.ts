@@ -12,7 +12,7 @@ import { CacheService } from "./service";
 export async function createRedisClientFromEnv(): Promise<Result<RedisClient, CacheError>> {
   const url = process.env.REDIS_URL;
   if (!url) {
-    logger.error("REDIS_URL is required to create the Redis client");
+    logger.debug("REDIS_URL is not set; Redis client disabled");
     return err({
       code: ErrorCode.RedisConfigurationError,
     });
@@ -111,7 +111,7 @@ export async function getCacheService(): Promise<Result<CacheService, CacheError
   globalForCache.formbricksCacheInitializing = (async (): Promise<Result<CacheService, CacheError>> => {
     const clientResult = await createRedisClientFromEnv();
     if (!clientResult.ok) {
-      logger.error({ error: clientResult.error }, "Redis client creation failed");
+      if (clientResult.error.code !== ErrorCode.RedisConfigurationError) { logger.error({ error: clientResult.error }, "Redis client creation failed"); }
       return err({ code: clientResult.error.code });
     }
 
@@ -127,7 +127,7 @@ export async function getCacheService(): Promise<Result<CacheService, CacheError
   const result = await globalForCache.formbricksCacheInitializing;
   if (!result.ok) {
     globalForCache.formbricksCacheInitializing = undefined; // Allow retry
-    logger.error({ error: result.error }, "Cache service creation failed");
+    if (result.error.code !== ErrorCode.RedisConfigurationError) { logger.error({ error: result.error }, "Cache service creation failed"); }
   }
   return result;
 }
