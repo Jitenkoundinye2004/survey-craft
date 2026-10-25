@@ -1,4 +1,5 @@
 import { Metadata } from "next";
+import { redirect } from "next/navigation";
 import {
   EMAIL_AUTH_ENABLED,
   OIDC_DISPLAY_NAME,
@@ -6,6 +7,9 @@ import {
   SIGNUP_ENABLED,
   WEBAPP_URL,
 } from "@/lib/constants";
+import { getOrganizationsByUserId } from "@/lib/organization/service";
+import { getUser } from "@/lib/user/service";
+import { getUserWorkspaces } from "@/lib/workspace/service";
 import { FormWrapper } from "@/modules/auth/components/form-wrapper";
 import {
   getInviteTokenFromCallbackUrl,
@@ -13,6 +17,7 @@ import {
   getSearchParamString,
   resolveAuthCallbackUrl,
 } from "@/modules/auth/lib/callback-url";
+import { getSession } from "@/modules/auth/lib/session";
 import { getIsMultiOrgEnabled } from "@/modules/ee/license-check/lib/utils";
 import { getSsoAvailability, toSsoFormProps } from "@/modules/ee/sso/lib/sso-availability";
 import { LoginForm } from "./components/login-form";
@@ -27,6 +32,30 @@ export const LoginPage = async ({
 }: Readonly<{
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 }>) => {
+  let targetHref: string | null = null;
+  const session = await getSession();
+
+  if (session?.user?.id) {
+    try {
+      const user = await getUser(session.user.id);
+      if (user) {
+        const userOrganizations = await getOrganizationsByUserId(session.user.id);
+        if (userOrganizations.length > 0) {
+          const workspaces = await getUserWorkspaces(user.id, userOrganizations[0].id);
+          if (workspaces.length > 0) {
+            targetHref = `/workspaces/${workspaces[0].id}/surveys`;
+          }
+        }
+      }
+    } catch {
+      // Continue to render login form if workspace resolution fails
+    }
+  }
+
+  if (targetHref) {
+    return redirect(targetHref);
+  }
+
   const [isMultiOrgEnabled, ssoAvailability, searchParams] = await Promise.all([
     getIsMultiOrgEnabled(),
     getSsoAvailability(),

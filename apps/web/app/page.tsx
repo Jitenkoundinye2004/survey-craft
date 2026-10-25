@@ -1,3 +1,4 @@
+import { redirect } from "next/navigation";
 import { LandingPage } from "@/app/components/landing-page";
 import { getOrganizationsByUserId } from "@/lib/organization/service";
 import { getUser } from "@/lib/user/service";
@@ -8,29 +9,30 @@ export const dynamic = "force-dynamic";
 
 const Page = async () => {
   const session = await getSession();
-  let workspaceHref = "/auth/login";
-  let isAuthenticated = false;
+  let targetHref: string | null = null;
 
   if (session?.user?.id) {
     try {
       const user = await getUser(session.user.id);
       if (user) {
-        isAuthenticated = true;
         const userOrganizations = await getOrganizationsByUserId(session.user.id);
         if (userOrganizations.length > 0) {
           const workspaces = await getUserWorkspaces(user.id, userOrganizations[0].id);
           if (workspaces.length > 0) {
-            workspaceHref = `/workspaces/${workspaces[0].id}/surveys`;
+            targetHref = `/workspaces/${workspaces[0].id}/surveys`;
           }
         }
       }
     } catch {
-      // If error resolving workspace, fall back to login
-      workspaceHref = "/auth/login";
+      // Fall through to landing page if session resolution fails
     }
   }
 
-  return <LandingPage workspaceHref={workspaceHref} isAuthenticated={isAuthenticated} />;
+  if (targetHref) {
+    return redirect(targetHref);
+  }
+
+  return <LandingPage workspaceHref="/auth/login" isAuthenticated={false} />;
 };
 
 export default Page;

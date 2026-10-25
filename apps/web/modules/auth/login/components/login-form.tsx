@@ -148,7 +148,11 @@ export const LoginForm = ({
           return;
         }
 
-        router.push(resolvedCallbackPath || "/");
+        if (typeof window !== "undefined") {
+          window.location.href = resolvedCallbackPath || "/";
+        } else {
+          router.push(resolvedCallbackPath || "/");
+        }
         return;
       }
 
@@ -180,13 +184,19 @@ export const LoginForm = ({
         return;
       }
 
-      router.push(resolvedCallbackPath || "/");
+      if (typeof window !== "undefined") {
+        window.location.href = resolvedCallbackPath || "/";
+      } else {
+        router.push(resolvedCallbackPath || "/");
+      }
     } catch (error) {
       toast.error(error instanceof Error ? error.message : String(error));
     }
   };
 
-  const [showLogin, setShowLogin] = useState(false);
+  const [showLogin, setShowLogin] = useState(
+    !googleOAuthEnabled && !githubOAuthEnabled && !azureOAuthEnabled && !oidcOAuthEnabled && !samlSsoEnabled
+  );
   const [totpLogin, setTotpLogin] = useState(false);
   const [totpBackup, setTotpBackup] = useState(false);
   const [lastLoggedInWith, setLastLoggedInWith] = useState("");
