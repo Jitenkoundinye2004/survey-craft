@@ -83,10 +83,7 @@ export const WorkspaceLayout = async ({ layoutData, cookieStore, children }: Wor
   const organizationWorkspacesLimit = await getOrganizationWorkspacesLimit(organization.id);
   const isOwnerOrManager = isOwner || isManager;
 
-  // Validate that workspace permission exists for members
-  if (isMember && !workspacePermission) {
-    throw new ResourceNotFoundError(t("common.workspace"), null);
-  }
+  // When no granular team permissions are configured, organization members have standard workspace access
 
   // (Hobby response warning and trial-ending target mutually exclusive audiences, so no stacking.)
   const responseWarningThreshold = isHobby ? getResponseWarningThreshold(responseCount, cookieStore) : null;
