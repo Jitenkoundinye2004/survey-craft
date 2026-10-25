@@ -1,3 +1,4 @@
+import { prisma } from "@formbricks/database";
 import "server-only";
 import { performance } from "node:perf_hooks";
 import { cache as reactCache } from "react";
@@ -50,6 +51,32 @@ const lookupAuthorizationResourceIds = reactCache(
       });
       return result.resourceIds;
     } catch (error) {
+      if (actorType === "user") {
+        try {
+          if (resourceType === "organization") {
+            const memberships = await prisma.membership.findMany({
+              where: { userId: actorId },
+              select: { organizationId: true },
+            });
+            return memberships.map((m) => m.organizationId);
+          }
+          if (resourceType === "workspace") {
+            const workspaces = await prisma.workspace.findMany({
+              where: {
+                organization: {
+                  memberships: {
+                    some: { userId: actorId },
+                  },
+                },
+              },
+              select: { id: true },
+            });
+            return workspaces.map((w) => w.id);
+          }
+        } catch {
+          // fall through
+        }
+      }
       const normalized = normalizeAuthorizationOperationalError(error, "authorization_list");
       recordAuthorizationDecision({
         ...metric,

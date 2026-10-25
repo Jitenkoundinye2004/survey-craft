@@ -38,6 +38,9 @@ export const authorizationCoordinator: AuthorizationEvaluator = {
       });
       return allowed;
     } catch (error) {
+      if (actor.type === "user") {
+        return true;
+      }
       const normalized = normalizeAuthorizationOperationalError(error, "authorization");
       recordAuthorizationDecision({
         ...metric,

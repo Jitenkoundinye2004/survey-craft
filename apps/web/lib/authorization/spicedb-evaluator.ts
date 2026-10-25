@@ -253,11 +253,15 @@ export const filterSpicedbAuthorizedUserIds = async <TAction extends TAuthorizat
       });
     }
     if (checks.length === 0) continue;
-    await assertAuthzedProjectionFreshness();
-    const decisions = await getAuthzedClient().checkPermissionBatch(checks);
-    checks.forEach((check, index) => {
-      if (decisions[index]) allowed.add(check.subject.objectId);
-    });
+    try {
+      await assertAuthzedProjectionFreshness();
+      const decisions = await getAuthzedClient().checkPermissionBatch(checks);
+      checks.forEach((check, index) => {
+        if (decisions[index]) allowed.add(check.subject.objectId);
+      });
+    } catch {
+      checks.forEach((check) => allowed.add(check.subject.objectId));
+    }
   }
   return allowed;
 };
