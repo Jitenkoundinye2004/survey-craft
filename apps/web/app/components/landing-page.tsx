@@ -419,38 +419,6 @@ export const LandingPage = ({ workspaceHref, isAuthenticated }: Readonly<Landing
         </div>
       </section>
 
-      {/* 8. Bottom Call to Action */}
-      <section className="bg-gradient-to-b from-white to-slate-100 py-20 sm:py-28">
-        <div className="mx-auto max-w-4xl px-4 text-center sm:px-6 lg:px-8">
-          <ScrollReveal>
-            <h2 className="text-3xl font-extrabold tracking-tight text-slate-900 sm:text-5xl">
-              Ready to Build Better Feedback Journeys?
-            </h2>
-            <p className="mx-auto mt-4 max-w-2xl text-base text-slate-600 sm:text-lg">
-              Launch SurveyCraft now to create your first AI-powered survey or explore existing workspace
-              analytics.
-            </p>
-
-            <div className="mt-10 flex flex-wrap items-center justify-center gap-4">
-              <Link
-                href={workspaceHref}
-                className="inline-flex items-center gap-2 rounded-xl bg-slate-900 px-8 py-4 text-base font-semibold text-white shadow-md transition-all hover:scale-105 hover:bg-slate-800 focus-visible:ring-2 focus-visible:ring-slate-900 focus-visible:ring-offset-2 focus-visible:outline-hidden active:scale-95">
-                <span>{isAuthenticated ? "Open Workspace" : "Go to app"}</span>
-                <ArrowRight className="size-5" />
-              </Link>
-
-              {!isAuthenticated ? (
-                <Link
-                  href="/auth/login"
-                  className="inline-flex items-center gap-2 rounded-xl border border-slate-300 bg-white px-8 py-4 text-base font-semibold text-slate-700 shadow-xs transition hover:scale-105 hover:bg-slate-50">
-                  <span>Sign In with Credentials</span>
-                </Link>
-              ) : null}
-            </div>
-          </ScrollReveal>
-        </div>
-      </section>
-
       {/* 9. Footer */}
       <footer className="border-t border-slate-200 bg-white py-12">
         <div className="mx-auto flex max-w-7xl flex-col items-center justify-between gap-6 px-4 text-xs text-slate-500 sm:flex-row sm:px-6 lg:px-8">
