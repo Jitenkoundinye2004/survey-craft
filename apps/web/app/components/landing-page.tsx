@@ -89,7 +89,7 @@ export const LandingPage = ({ workspaceHref, isAuthenticated }: Readonly<Landing
   ];
 
   return (
-    <div className="relative w-full flex-1 overflow-y-auto scroll-smooth bg-slate-50/50 text-slate-900">
+    <div className="relative min-h-dvh w-full bg-slate-50/50 text-slate-900">
       {/* Top Reading Progress Bar */}
       <ReadingProgressBar />
 

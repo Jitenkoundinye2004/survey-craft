@@ -20,8 +20,8 @@ const RootLayout = async ({ children }: { children: React.ReactNode }) => {
   const locale = await getLocale();
 
   return (
-    <html lang={locale} translate="no">
-      <body className="flex h-dvh flex-col transition-all ease-in-out">
+    <html lang={locale} translate="no" className="scroll-smooth">
+      <body className="flex min-h-dvh flex-col antialiased">
         {/* First in the document so instrumentation-client.ts can start Sentry as early as possible. */}
         <SentryClientConfigScript />
         <NoScriptWarning locale={locale} />
