@@ -112,6 +112,7 @@ const nextConfig = {
   turbopack: {},
   experimental: {
     cpus: 1,
+    turbopackFileSystemCacheForBuild: true,
     webpackMemoryOptimizations: true,
     // With patches/next@16.3.8.patch applied, Next clones no request body for proxy.ts or for an external
     // rewrite such as the PostHog /ingest proxy (ENG-3972), so this only bounds the body Next hands an
