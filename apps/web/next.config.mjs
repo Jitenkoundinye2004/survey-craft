@@ -87,10 +87,10 @@ const nextConfig = {
   ],
   // Jackson is configured exclusively with PostgreSQL (modules/ee/auth/saml/lib/jackson.ts).
   // TypeORM's lazy SQL Server driver traces unused mssql/tedious code and vulnerable sprintf-js.
-  outputFileTracingExcludes: {
+  outputFileTracingExcludes: process.env.VERCEL ? undefined : {
     "/*": ["../../**/node_modules/{mssql,tedious,sprintf-js}/**/*"],
   },
-  outputFileTracingIncludes: {
+  outputFileTracingIncludes: process.env.VERCEL ? undefined : {
     "/api/auth/**/*": ["../../node_modules/jose/**/*"],
     // pino loads transport code in worker threads via dynamic require() — the file tracer
     // only traces static imports and misses these runtime-loaded files.
