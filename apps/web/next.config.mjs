@@ -56,9 +56,6 @@ const nextConfig = {
   typescript: {
     ignoreBuildErrors: true,
   },
-  eslint: {
-    ignoreDuringBuilds: true,
-  },
   poweredByHeader: false,
   // Enable source maps only when uploading to Sentry (CI/production); skip for faster local builds
   productionBrowserSourceMaps: !!process.env.SENTRY_AUTH_TOKEN,
@@ -114,6 +111,7 @@ const nextConfig = {
   },
   turbopack: {},
   experimental: {
+    cpus: 1,
     // With patches/next@16.3.8.patch applied, Next clones no request body for proxy.ts or for an external
     // rewrite such as the PostHog /ingest proxy (ENG-3972), so this only bounds the body Next hands an
     // edge-runtime function, and this app has none. Kept as the fallback for a Next without the patch, which
