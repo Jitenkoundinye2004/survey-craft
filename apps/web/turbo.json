@@ -14,7 +14,8 @@
         "S3_ENDPOINT_URL",
         "SENTRY_AUTH_TOKEN",
         "WEBAPP_URL",
-        "FORMBRICKS_DEPLOYMENT_ID"
+        "FORMBRICKS_DEPLOYMENT_ID",
+        "VERCEL"
       ],
       "inputs": [
         "$TURBO_DEFAULT$",
